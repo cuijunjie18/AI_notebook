@@ -93,7 +93,8 @@ def _change_one_hot_label(X):
     
 
 def load_mnist(normalize=True, flatten=True, one_hot_label=False):
-    """读入MNIST数据集
+    """
+    读入MNIST数据集
     
     Parameters
     ----------
