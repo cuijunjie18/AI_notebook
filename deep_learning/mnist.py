@@ -19,7 +19,7 @@ key_file = {
 }
 
 #dataset_dir = os.path.dirname(os.path.abspath(__file__))
-dataset_dir = 'E:/my_python/CV_AI/Neural_Networks/MNIST_data/'  #添加这句代码
+dataset_dir = 'E:/My_resources/dataset_work/MNIST_data/'  #添加这句代码
 save_file = dataset_dir + "/mnist.pkl"
 
 train_num = 60000
@@ -93,8 +93,7 @@ def _change_one_hot_label(X):
     
 
 def load_mnist(normalize=True, flatten=True, one_hot_label=False):
-    """
-    读入MNIST数据集
+    """读入MNIST数据集
     
     Parameters
     ----------
