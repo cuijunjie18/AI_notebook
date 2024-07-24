@@ -109,7 +109,7 @@ def cross_entropy_error(y,t):
 
 def function_four(x):
       return x[0]**3 + 2*x[1] + 3*x[2] + 4*x[3]
-# 梯度下降法相关集合
+# 数值微分梯度下降法相关集合
 def numerical_gradient_1d(f,x):
     """
     计算一行矩阵的梯度,即一维数组的梯度,数学上来讲为计算多元函数梯度
@@ -160,19 +160,155 @@ def numerical_gradient_2d(f,x):
         
         return grad
 
+def numerical_gradient(f, x):
+    """
+    照搬作者的数值微分梯度计算
+
+    input:
+    f:输入函数
+    x:输入矩阵
+    
+    return:
+    grad:梯度
+    """
+    h = 1e-4 # 0.0001
+    grad = np.zeros_like(x)
+    
+    it = np.nditer(x, flags=['multi_index'], op_flags=['readwrite'])
+    while not it.finished:
+        idx = it.multi_index
+        tmp_val = x[idx]
+        x[idx] = float(tmp_val) + h
+        fxh1 = f(x) # f(x+h)
+        
+        x[idx] = tmp_val - h 
+        fxh2 = f(x) # f(x-h)
+        grad[idx] = (fxh1 - fxh2) / (2*h)
+        
+        x[idx] = tmp_val # 还原值
+        it.iternext()   
+        
+    return grad
 
 
 
 
 
 
+# 误差反向传播相关节点层
 
-"""
-skip()
-sigmoid()
-relu()
-softmax()
-improve_softmax()
-mean_squared_error()
-cross_entropy_error()
-"""
+class MulLayer:
+    """简单乘法层"""
+    def __init__(self):
+        self.x = None
+        self.y = None
+    
+    def forward(self,x,y):
+        self.x = x
+        self.y = y
+        out = x*y
+
+        return out
+
+    def backward(self,dout):
+        dx = self.y*dout # 翻转信号
+        dy = self.x*dout
+
+        return dx,dy
+    
+class AddLayer:
+    """加法层的实现"""
+    def __init__(self):
+        pass
+
+    def forward(self,x,y):
+        out = x + y
+        return out
+    
+    def backward(self,dout):
+        dx = dout*1
+        dy = dout*1
+
+        return dx,dy
+    
+class Relu:
+    """Relu函数的计算层"""
+
+    def __init__(self):
+        self.mask = None
+
+    def forward(self,x):
+        self.mask = (x <= 0)
+        out = x.copy()
+        out[self.mask] = 0 # 这个用法要学会；将True位置数置零
+
+        return out
+    
+    def backward(self,dout):
+        dout[self.mask] = 0
+        dx = dout
+        
+        return dx
+
+class Sigmoid:
+    """sigmoid计算节点"""
+    def __init__(self):
+        self.out = None
+    
+    def forward(self,x):
+        out = 1/(1 + np.exp(-x))
+        self.out = out
+
+        return out
+    
+    def backward(self,dout):
+        dx = dout*self.out*(1.0 - self.out)
+
+        return dx
+
+# 兼容批处理的Affine层的实现
+class Affine:
+    """Affine仿射层"""
+
+    def __init__(self,W,b):
+        self.W = W
+        self.b = b
+        self.x = None
+        self.dW = None
+        self.db = None
+
+    def forward(self,x):
+        self.x = x
+        out = np.dot(x,self.W) + self.b
+
+        return out
+    
+    def backward(self,dout):
+        dx = np.dot(dout,self.W.T) # 注意这里的矩阵乘法，W进行了转置
+        self.dW = np.dot(self.x.T,dout) # 同样要转置，对应矩阵求导公式
+        self.db = np.sum(dout,axis = 0)
+
+        return dx
+
+# 构建Softmax-with-Loss层
+class SoftmaxWithLoss:
+    """Softmax正规化及交叉熵损失层"""
+
+    def __init__(self):
+        self.loss = None # 损失
+        self.y = None # softmax的输出
+        self.t = None # 监督数据(要求one-hot格式的)
+
+    def forward(self,x,t):
+        """x为未激活的输出层,t为监督数据"""
+        self.t = t
+        self.y = softmax(x)
+        self.loss = cross_entropy_error(self.y,self.t)
+
+        return self.loss
+    
+    def backward(self,dout = 1): # 由于是最后一层了，无上游导数，默认参数为1
+        batch_size = self.t.shape[0]
+        dx = (self.y - self.t) / batch_size # 计算单个输入数据的导数，应该叫做误差
+
+        return dx
