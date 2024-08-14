@@ -68,6 +68,8 @@ def softmax(a:np.ndarray) -> np.ndarray:
     y = np.exp(a)/np.sum(np.exp(a),axis = 0) # 注意要有多维才能axis,所有之前对ndim == 1的进行reshape
     return y.T # 最后转置回去
 
+
+
 # 损失函数集合
 def mean_squared_error(y,t):
     """
@@ -192,9 +194,6 @@ def numerical_gradient(f, x):
 
 
 
-
-
-
 # 误差反向传播相关节点层
 
 class MulLayer:
@@ -312,3 +311,259 @@ class SoftmaxWithLoss:
         dx = (self.y - self.t) / batch_size # 计算单个输入数据的导数，应该叫做误差
 
         return dx
+
+# 定义卷积层的类
+class Convolution:
+    def __init__(self, W, b, stride=1, pad=0):
+        self.W = W
+        self.b = b
+        self.stride = stride
+        self.pad = pad
+        
+        # 中间数据（backward时使用）
+        self.x = None   
+        self.col = None
+        self.col_W = None
+        
+        # 权重和偏置参数的梯度
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        FN, C, FH, FW = self.W.shape
+        N, C, H, W = x.shape
+        out_h = 1 + int((H + 2*self.pad - FH) / self.stride)
+        out_w = 1 + int((W + 2*self.pad - FW) / self.stride)
+
+        col = im2col(x, FH, FW, self.stride, self.pad)
+        col_W = self.W.reshape(FN, -1).T
+
+        out = np.dot(col, col_W) + self.b
+        out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
+
+        self.x = x
+        self.col = col
+        self.col_W = col_W
+
+        return out
+
+    def backward(self, dout):
+        FN, C, FH, FW = self.W.shape
+        dout = dout.transpose(0,2,3,1).reshape(-1, FN)
+
+        self.db = np.sum(dout, axis=0)
+        self.dW = np.dot(self.col.T, dout)
+        self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
+
+        dcol = np.dot(dout, self.col_W.T)
+        dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
+
+        return dx
+    
+    # 原理基本与Affine层一致，但是其中的矩阵转化有点复杂
+    def backward(self, dout):
+        """卷积层的反向传播"""
+        FN, C, FH, FW = self.W.shape
+        dout = dout.transpose(0,2,3,1).reshape(-1, FN)
+
+        self.db = np.sum(dout, axis=0)
+        self.dW = np.dot(self.col.T, dout)
+        self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
+
+        dcol = np.dot(dout, self.col_W.T)
+        dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
+
+        return dx
+# 定义池化层的类
+class Pooling:
+    """池化层的实现"""
+    def __init__(self,pool_h,pool_w,stride = 1,pad = 0):
+        self.pool_h = pool_h
+        self.pool_w = pool_w
+        self.stride = stride
+        self.pad = pad
+
+        # 传播所需
+        self.x = None
+        self.arg_max = None
+
+    def forward(self,x):
+        N,C,H,W = x.shape
+        out_h = int(1 + (H - self.pool_h)/self.stride)
+        out_w = int(1 + (W - self.pool_w)/self.stride)
+
+        # 展开
+        col = im2col(x,self.pool_h,self.pool_w,self.stride,self.pad)
+        col = col.reshape(-1,self.pool_h*self.pool_w)
+
+        # 进行取最大值操作
+        arg_max = np.argmax(col, axis=1)
+        out = np.max(col,axis = 1)
+
+        # 转换
+        out = out.reshape(N,out_h,out_w,C).transpose(0,3,1,2)
+
+        # 保存用于backward
+        self.x = x
+        self.arg_max = arg_max
+
+        return out
+    
+    # 反向传播基本原理与relu相似，但是代码难理解
+    def backward(self,dout): 
+        dout = dout.transpose(0, 2, 3, 1)
+        
+        pool_size = self.pool_h * self.pool_w
+        dmax = np.zeros((dout.size, pool_size))
+        dmax[np.arange(self.arg_max.size), self.arg_max.flatten()] = dout.flatten()
+        dmax = dmax.reshape(dout.shape + (pool_size,)) 
+        
+        dcol = dmax.reshape(dmax.shape[0] * dmax.shape[1] * dmax.shape[2], -1)
+        dx = col2im(dcol, self.x.shape, self.pool_h, self.pool_w, self.stride, self.pad)
+        
+        return dx
+
+
+
+# 优化器合集
+class SGD:
+    """随机梯度下降算法"""
+    def __init__(self,learning_rate = 0.01):
+        self.lr = learning_rate
+
+    def update(self,params,grads):
+        for key in params.keys():
+            params[key] -= self.lr*grads[key]
+
+class Momentum:
+    """Momentum算法"""
+    def __init__(self,learning_rate = 0.01,momentum = 0.9):
+        self.lr = learning_rate
+        self.momentum = momentum
+        self.v = None
+
+    def update(self,params,grads):
+        if self.v is None:
+            self.v = {}
+            for key,val in params.items():
+                self.v[key] = np.zeros_like(val)
+        
+        for key in params.keys():
+            self.v[key] = self.momentum*self.v[key] - self.lr*grads[key]
+            params[key] += self.v[key]
+
+class AdaGrad:
+    """学习率衰减算法"""
+    def __init__(self,learning_rate = 0.01):
+        self.lr = learning_rate
+        self.h = None
+    
+    def update(self,params,grads):
+        if self.h is None:
+            self.h = {}
+            for key,val in params.items():
+                self.h[key] = np.zeros_like(val)
+
+        for key in params.keys():
+            self.h[key] += grads[key]*grads[key]
+            params[key] -= self.lr*grads[key]/np.sqrt(self.h[key] + 1e-7) # 加上微小值防止除0错误
+
+
+
+# 卷积im2col相关
+# coding: utf-8
+def smooth_curve(x):
+    """用于使损失函数的图形变圆滑
+
+    参考：http://glowingpython.blogspot.jp/2012/02/convolution-with-numpy.html
+    """
+    window_len = 11
+    s = np.r_[x[window_len-1:0:-1], x, x[-1:-window_len:-1]]
+    w = np.kaiser(window_len, 2)
+    y = np.convolve(w/w.sum(), s, mode='valid')
+    return y[5:len(y)-5]
+
+
+def shuffle_dataset(x, t):
+    """打乱数据集
+
+    Parameters
+    ----------
+    x : 训练数据
+    t : 监督数据
+
+    Returns
+    -------
+    x, t : 打乱的训练数据和监督数据
+    """
+    permutation = np.random.permutation(x.shape[0])
+    x = x[permutation,:] if x.ndim == 2 else x[permutation,:,:,:]
+    t = t[permutation]
+
+    return x, t
+
+def conv_output_size(input_size, filter_size, stride=1, pad=0):
+    return (input_size + 2*pad - filter_size) / stride + 1
+
+
+def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
+    """
+
+    Parameters
+    ----------
+    input_data : 由(数据量, 通道, 高, 长)的4维数组构成的输入数据
+    filter_h : 滤波器的高
+    filter_w : 滤波器的长
+    stride : 步幅
+    pad : 填充
+
+    Returns
+    -------
+    col : 2维数组
+    """
+    N, C, H, W = input_data.shape
+    out_h = (H + 2*pad - filter_h)//stride + 1
+    out_w = (W + 2*pad - filter_w)//stride + 1
+
+    img = np.pad(input_data, [(0,0), (0,0), (pad, pad), (pad, pad)], 'constant')
+    col = np.zeros((N, C, filter_h, filter_w, out_h, out_w))
+
+    for y in range(filter_h):
+        y_max = y + stride*out_h
+        for x in range(filter_w):
+            x_max = x + stride*out_w
+            col[:, :, y, x, :, :] = img[:, :, y:y_max:stride, x:x_max:stride]
+
+    col = col.transpose(0, 4, 5, 1, 2, 3).reshape(N*out_h*out_w, -1)
+    return col
+
+
+def col2im(col, input_shape, filter_h, filter_w, stride=1, pad=0):
+    """
+
+    Parameters
+    ----------
+    col :
+    input_shape : 输入数据的形状（例：(10, 1, 28, 28)）
+    filter_h :
+    filter_w
+    stride
+    pad
+
+    Returns
+    -------
+
+    """
+    N, C, H, W = input_shape
+    out_h = (H + 2*pad - filter_h)//stride + 1
+    out_w = (W + 2*pad - filter_w)//stride + 1
+    col = col.reshape(N, out_h, out_w, C, filter_h, filter_w).transpose(0, 3, 4, 5, 1, 2)
+
+    img = np.zeros((N, C, H + 2*pad + stride - 1, W + 2*pad + stride - 1))
+    for y in range(filter_h):
+        y_max = y + stride*out_h
+        for x in range(filter_w):
+            x_max = x + stride*out_w
+            img[:, :, y:y_max:stride, x:x_max:stride] += col[:, :, y, x, :, :]
+
+    return img[:, :, pad:H + pad, pad:W + pad]
