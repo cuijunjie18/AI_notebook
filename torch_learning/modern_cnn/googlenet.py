@@ -29,7 +29,8 @@ class Inception(nn.Module):
         p4 = F.relu(self.p4_2(self.p4_1(x)))
         return torch.cat((p1, p2, p3, p4), dim=1) # 在通道维度上连结输出
     
-def get_googlenet(in_channels,class_nums):
+def googlenet(in_channels,class_nums):
+    """获取googlenet的整个模型"""
     b1 = nn.Sequential(
             nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3),
             nn.ReLU(),
@@ -54,7 +55,7 @@ def get_googlenet(in_channels,class_nums):
     b5 = nn.Sequential(
             Inception(832, 256, (160, 320), (32, 128), 128),
             Inception(832, 384, (192, 384), (48, 128), 128),
-            nn.AdaptiveAvgPool2d((1,1)),
+            nn.AdaptiveAvgPool2d((1,1)), # 全局池化(N,C,H,W) -> (N,C,1,1)
             nn.Flatten())
     return nn.Sequential(
         b1,b2,b3,b4,b5,
