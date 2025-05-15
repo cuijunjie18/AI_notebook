@@ -1,12 +1,5 @@
-from net_frame import *
+from net_frame import count_corpus
 
-# 获取数据迭代器
-dir = 'poems_data/'
-# dir = 'data/'
-batch_size, num_steps = 2, 5
-train_iter,vocab = load_data(batch_size,num_steps,dir)
-corpus = train_iter.corpus
-str = ''
-for idx in corpus:
-    str += vocab.idx_to_token[idx]
-print(str)
+line = ['1','2','3','4','4']
+ans = count_corpus(line)
+print(ans)
