@@ -1,12 +1,15 @@
-## 我的AI学习笔记
+# 我的AI学习笔记
 
-### 主题内容
+## 目录
 
-**深度学习入门在deep_learning**
+- [opencv_note](opencv_note): 基于opencv的基础视觉的学习.  
+- [machine_learning](machine_learning): 机器学习入门算法.  
+- [deep_learning](deep_learning): 最初的numpy手搓神经网络.  
+- [pytorch-examples](pytorch-examples): 斯坦福的简单pytorch使用教程.  
+- [torch_learning](torch_learning): 同步李沐的动手学深度学习的笔记，熟练使用torch的学习过程，包含NLP与CV的内容.  
+- [LLM_notes](LLM_notes): 新增的一些大模型笔记.  
 
-**pytorch学习与应用在torch_learning**
-
-***
+## 后话
 
 下面附上一段我觉得很有意义的话(Deepseek生成的)！继续加油吧
 
